@@ -46,8 +46,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
   toggleOpen: () => set((s) => ({ isOpen: !s.isOpen })),
   toggleExpanded: () => set((s) => ({ isExpanded: !s.isExpanded })),
 
-  setContext: (deckId, page) =>
-    set({ currentDeckId: deckId, currentPage: page }),
+  setContext: (deckId, page) => {
+    const state = get();
+    if (state.conversationId && state.currentDeckId !== deckId) {
+      // Deck changed — reset conversation so the new one picks up fresh context
+      set({
+        currentDeckId: deckId,
+        currentPage: page,
+        conversationId: null,
+        messages: [],
+        streamingText: "",
+        currentThinking: [],
+        currentToolUse: null,
+      });
+    } else {
+      set({ currentDeckId: deckId, currentPage: page });
+    }
+  },
 
   clearChat: () =>
     set({
@@ -95,55 +110,58 @@ export const useChatStore = create<ChatState>((set, get) => ({
       } else {
         provider = settings.provider || undefined;
         model = settings.model || undefined;
-        // Filter out local key from cloud requests
         const allKeys = settings.getActiveApiKeys();
         const { local: _localKey, ...cloudKeys } = allKeys;
         apiKeys = Object.keys(cloudKeys).length > 0 ? cloudKeys : undefined;
       }
 
-      // Create conversation if needed
-      let convId = state.conversationId;
-      if (!convId) {
-        const context: Record<string, unknown> = {};
-        if (state.currentDeckId) context.deck_id = state.currentDeckId;
-        if (state.currentPage) context.page = state.currentPage;
-
-        const conv = await api.createConversation({
-          context,
-          provider,
-          model,
-        });
-        convId = conv.id;
-        set({ conversationId: convId });
-      }
-
       // Add user message to local state immediately
+      const convId = state.conversationId;
       const userMsg: ChatMessage = {
         id: `temp-${Date.now()}`,
-        conversation_id: convId,
+        conversation_id: convId || "",
         role: "user",
         content,
         created_at: new Date().toISOString(),
       };
       set((s) => ({ messages: [...s.messages, userMsg] }));
 
-      // Stream response via SSE (include user settings)
-      const url = api.getMessageStreamUrl(convId);
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content,
+      // Build AG-UI request
+      const agUIBody = {
+        thread_id: convId || undefined,
+        run_id: crypto.randomUUID(),
+        messages: [
+          ...state.messages.map((m) => ({ role: m.role, content: m.content })),
+          { role: "user", content },
+        ],
+        state: {
           provider,
           model,
           api_keys: apiKeys,
           local_url: isLocal && localUrl ? localUrl : undefined,
-        }),
+          deck_id: state.currentDeckId || undefined,
+        },
+        context: state.currentPage
+          ? [{ type: "page", value: state.currentPage }]
+          : [],
+      };
+
+      const url = api.getAGUIEndpointUrl();
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(agUIBody),
       });
 
       if (!response.ok) {
         const err = await response.json().catch(() => ({ detail: "Unknown error" }));
         throw new Error(err.detail || `HTTP ${response.status}`);
+      }
+
+      // Capture thread_id from response header (new conversation)
+      const threadId = response.headers.get("X-Thread-Id");
+      if (threadId && !convId) {
+        set({ conversationId: threadId });
       }
 
       const reader = response.body?.getReader();
@@ -152,6 +170,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const decoder = new TextDecoder();
       let buffer = "";
       let fullText = "";
+      let toolArgs = "";
 
       while (true) {
         const { done, value } = await reader.read();
@@ -162,46 +181,83 @@ export const useChatStore = create<ChatState>((set, get) => ({
         buffer = lines.pop() || "";
 
         for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            // SSE event type — next data line will have the payload
-            continue;
-          }
-          if (line.startsWith("data: ")) {
-            const raw = line.slice(6);
-            if (!raw || raw === "[DONE]") continue;
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6);
+          if (!raw || raw === "[DONE]") continue;
 
-            try {
-              const payload = JSON.parse(raw);
+          try {
+            const evt = JSON.parse(raw);
+            const eventType: string = evt.type;
 
-              // Determine event type from payload or previous event line
-              // sse-starlette sends "event: X\ndata: Y\n\n" format
-              // We parse the data and check what it contains
-              if (payload.thoughts) {
-                set({ currentThinking: payload.thoughts });
-              } else if (payload.tool && payload.args) {
-                set({ currentToolUse: { tool: payload.tool, args: payload.args } });
-              } else if (payload.tool && payload.result) {
-                set({ currentToolUse: null });
-              } else if (payload.text !== undefined) {
-                fullText += payload.text;
+            switch (eventType) {
+              case "TEXT_MESSAGE_CONTENT":
+                fullText += evt.delta;
                 set({ streamingText: fullText });
-              } else if (payload.full_text !== undefined) {
-                fullText = payload.full_text;
-              } else if (payload.detail) {
-                console.error("SSE error:", payload.detail);
-              }
-            } catch {
-              // Skip non-JSON lines
+                break;
+
+              case "TOOL_CALL_START":
+                toolArgs = "";
+                set({
+                  currentToolUse: {
+                    tool: evt.toolCallName,
+                    args: {},
+                  },
+                });
+                break;
+
+              case "TOOL_CALL_ARGS":
+                toolArgs += evt.delta || "";
+                try {
+                  const parsed = JSON.parse(toolArgs);
+                  set((s) => ({
+                    currentToolUse: s.currentToolUse
+                      ? { ...s.currentToolUse, args: parsed }
+                      : null,
+                  }));
+                } catch {
+                  // args still incomplete JSON — wait for more
+                }
+                break;
+
+              case "TOOL_CALL_END":
+                break;
+
+              case "TOOL_CALL_RESULT":
+                set({ currentToolUse: null });
+                break;
+
+              case "CUSTOM":
+                if (evt.name === "thinking" && evt.value?.thoughts) {
+                  set({ currentThinking: evt.value.thoughts });
+                }
+                break;
+
+              case "STATE_SNAPSHOT":
+                // Could sync local state with agent state
+                break;
+
+              case "RUN_ERROR":
+                console.error("Agent error:", evt.message);
+                break;
+
+              case "TEXT_MESSAGE_START":
+              case "TEXT_MESSAGE_END":
+              case "RUN_STARTED":
+              case "RUN_FINISHED":
+                break;
             }
+          } catch {
+            // Skip non-JSON lines
           }
         }
       }
 
       // Add assistant message to local state
+      const finalConvId = get().conversationId || threadId || "";
       if (fullText) {
         const assistantMsg: ChatMessage = {
           id: `temp-${Date.now()}-assistant`,
-          conversation_id: convId,
+          conversation_id: finalConvId,
           role: "assistant",
           content: fullText,
           created_at: new Date().toISOString(),
@@ -215,7 +271,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     } catch (err) {
       console.error("Chat error:", err);
-      // Add error as a local message
       const errorMsg: ChatMessage = {
         id: `temp-error-${Date.now()}`,
         conversation_id: get().conversationId || "",

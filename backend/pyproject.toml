@@ -29,6 +29,7 @@ dependencies = [
     "email-validator>=2.0.0",
     "sse-starlette>=1.6.0",
     "langchain-text-splitters>=0.0.1",
+    "ag-ui-protocol>=0.1.11",
 ]
 
 [project.optional-dependencies]

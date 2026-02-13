@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useDeckBuilder } from "@/lib/stores/deckBuilderStore";
+import { useChatStore } from "@/lib/stores/chatStore";
 import { api } from "@/lib/api/client";
 import { Card, Leader } from "@/types";
 import CardTooltip from "@/components/ui/CardTooltip";
@@ -22,6 +23,7 @@ export default function DeckBuilderPage() {
   const searchParams = useSearchParams();
   const deckIdParam = searchParams.get("deckId");
   const { loadDeck, clearDeck, deckId } = useDeckBuilder();
+  const setContext = useChatStore((s) => s.setContext);
 
   // Clear store when navigating to /deck-builder without a deckId (new deck)
   useEffect(() => {
@@ -29,6 +31,18 @@ export default function DeckBuilderPage() {
       clearDeck();
     }
   }, [deckIdParam, deckId, clearDeck]);
+
+  // Sync deck ID to chat context
+  useEffect(() => {
+    setContext(deckId || null, "deck-builder");
+  }, [deckId, setContext]);
+
+  // Clear context on unmount
+  useEffect(() => {
+    return () => {
+      useChatStore.getState().setContext(null, null);
+    };
+  }, []);
 
   const { data: existingDeck } = useQuery({
     queryKey: ["deck", deckIdParam],

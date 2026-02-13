@@ -236,6 +236,10 @@ class APIClient {
     return `${API_BASE_URL}/chat/conversations/${conversationId}/messages`;
   }
 
+  getAGUIEndpointUrl(): string {
+    return `${API_BASE_URL}/chat/ag-ui`;
+  }
+
   // Settings
   async validateApiKey(
     provider: string,

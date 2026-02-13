@@ -1,11 +1,14 @@
 import json
 import logging
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
+
+from ag_ui.encoder import EventEncoder
 
 from app.config import settings
 from app.database import get_db
@@ -21,6 +24,7 @@ from app.services.conversation_service import ConversationService
 from app.services.memory_service import MemoryService
 from app.services.knowledge_service import KnowledgeService
 from app.agents.core.agent import OPTCGAgent
+from app.agents.core.ag_ui_adapter import AGUIAdapter
 # Import tools so the registry is populated
 import app.agents.tools  # noqa: F401
 
@@ -184,3 +188,140 @@ async def send_message(
             await _conversation_service.release_lock(conversation_id)
 
     return EventSourceResponse(event_generator())
+
+
+# ── AG-UI Protocol Endpoint ──
+
+
+class AGUIRequest(BaseModel):
+    """Simplified RunAgentInput for our frontend."""
+
+    thread_id: str | None = None  # maps to conversation_id (null = new)
+    run_id: str | None = None
+    messages: list[dict] = Field(default_factory=list)
+    state: dict = Field(default_factory=dict)  # provider, model, api_keys, deck_id
+    context: list[dict] = Field(default_factory=list)  # [{type, value}]
+
+
+@router.post("/ag-ui")
+async def ag_ui_endpoint(
+    data: AGUIRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    AG-UI protocol endpoint for chat.
+
+    Streams AG-UI events (RUN_STARTED, TEXT_MESSAGE_CONTENT, TOOL_CALL_*, etc.)
+    following https://github.com/ag-ui-protocol/ag-ui
+    """
+    encoder = EventEncoder()
+
+    # Extract user message — last message with role "user"
+    user_message = ""
+    for msg in reversed(data.messages):
+        if msg.get("role") == "user":
+            user_message = msg.get("content", "")
+            break
+    if not user_message:
+        raise HTTPException(status_code=400, detail="No user message found")
+
+    # Extract settings from state
+    state = data.state or {}
+    provider = state.get("provider") or settings.default_ai_provider
+    model = state.get("model") or None
+    api_keys = state.get("api_keys") or None
+    local_url = state.get("local_url") or None
+    deck_id = state.get("deck_id") or None
+
+    # Extract page from context
+    page = None
+    for ctx in data.context:
+        if ctx.get("type") == "page":
+            page = ctx.get("value")
+
+    # Resolve or create conversation from thread_id
+    thread_id = data.thread_id
+    conversation_id: UUID | None = None
+
+    if thread_id:
+        try:
+            conversation_id = UUID(thread_id)
+            conv = await _conversation_service.get_conversation(db, conversation_id)
+            if not conv:
+                conversation_id = None
+        except ValueError:
+            conversation_id = None
+
+    if not conversation_id:
+        # Create new conversation
+        context: dict = {}
+        if deck_id:
+            context["deck_id"] = deck_id
+        if page:
+            context["page"] = page
+
+        conv = await _conversation_service.create_conversation(
+            db,
+            title=None,
+            context=context,
+            provider=provider,
+            model=model,
+        )
+        conversation_id = conv.id
+        thread_id = str(conversation_id)
+
+    # Acquire lock
+    locked = await _conversation_service.acquire_lock(conversation_id)
+    if not locked:
+        raise HTTPException(
+            status_code=409,
+            detail="Another message is being processed for this conversation",
+        )
+
+    run_id = data.run_id or str(uuid4())
+
+    async def event_stream():
+        try:
+            llm = AIProviderFactory.get_llm(
+                provider=provider,
+                model=model,
+                api_keys=api_keys,
+                local_url=local_url,
+            )
+
+            agent = OPTCGAgent(
+                llm=llm,
+                conversation_id=conversation_id,
+                db=db,
+                memory_service=_memory_service,
+                knowledge_service=_knowledge_service,
+                conversation_service=_conversation_service,
+                context=conv.context or {},
+            )
+
+            adapter = AGUIAdapter(agent, encoder)
+
+            async for chunk in adapter.stream(user_message, run_id, thread_id):
+                yield chunk
+
+        except ValueError as e:
+            logger.error(f"AG-UI config error: {e}")
+            from ag_ui.core import RunErrorEvent
+
+            yield encoder.encode(RunErrorEvent(message=str(e)))
+        except Exception as e:
+            logger.error(f"AG-UI error: {e}", exc_info=True)
+            from ag_ui.core import RunErrorEvent
+
+            yield encoder.encode(RunErrorEvent(message=f"Agent error: {str(e)}"))
+        finally:
+            await _conversation_service.release_lock(conversation_id)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type=encoder.get_content_type(),
+        headers={
+            "X-Thread-Id": thread_id,
+            "Access-Control-Expose-Headers": "X-Thread-Id",
+        },
+    )

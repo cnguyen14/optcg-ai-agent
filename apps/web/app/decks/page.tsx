@@ -5,6 +5,7 @@ import { api } from "@/lib/api/client";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import type { Deck } from "@/types";
+import { useChatStore } from "@/lib/stores/chatStore";
 
 const COLOR_MAP: Record<string, string> = {
   Red: "#DC2626",
@@ -152,12 +153,25 @@ function DeckBox({
 
 export default function DecksPage() {
   const queryClient = useQueryClient();
+  const setContext = useChatStore((s) => s.setContext);
   const [selectedDeck, setSelectedDeck] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<string>("");
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [analysis, setAnalysis] = useState<any>(null);
   const analysisPanelRef = useRef<HTMLDivElement>(null);
+
+  // Sync selected deck to chat context
+  useEffect(() => {
+    setContext(selectedDeck, "decks");
+  }, [selectedDeck, setContext]);
+
+  // Clear context on unmount
+  useEffect(() => {
+    return () => {
+      useChatStore.getState().setContext(null, null);
+    };
+  }, []);
 
   // Fetch ALL decks (no is_public filter)
   const { data: decks, isLoading } = useQuery({

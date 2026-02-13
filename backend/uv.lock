@@ -9,6 +9,18 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "ag-ui-protocol"
+version = "0.1.11"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a2/c1/33ab11dc829c6c28d0d346988b2f394aa632d3ad63d1d2eb5f16eccd769b/ag_ui_protocol-0.1.11.tar.gz", hash = "sha256:b336dfebb5751e9cc2c676a3008a4bce4819004e6f6f8cba73169823564472ae", size = 6249, upload-time = "2026-02-11T12:41:36.085Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/14/83/5c6f4cb24d27d9cbe0c31ba2f3b4d1ff42bc6f87ba9facfa9e9d44046c6b/ag_ui_protocol-0.1.11-py3-none-any.whl", hash = "sha256:b0cc25570462a8eba8e57a098e0a2d6892a1f571a7bea7da2d4b60efd5d66789", size = 8392, upload-time = "2026-02-11T12:41:35.303Z" },
+]
+
+[[package]]
 name = "aiohappyeyeballs"
 version = "2.6.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2130,6 +2142,7 @@ name = "optcg-ai-agent-backend"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "ag-ui-protocol" },
     { name = "alembic" },
     { name = "anthropic" },
     { name = "asyncpg" },
@@ -2169,6 +2182,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "ag-ui-protocol", specifier = ">=0.1.11" },
     { name = "alembic", specifier = ">=1.13.1" },
     { name = "anthropic", specifier = ">=0.18.0" },
     { name = "asyncpg", specifier = ">=0.29.0" },
