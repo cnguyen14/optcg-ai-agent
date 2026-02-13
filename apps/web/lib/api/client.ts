@@ -1,4 +1,4 @@
-import { Card, Leader, Deck, DeckCreateRequest, DeckUpdateRequest } from "@/types";
+import { Card, Leader, Deck, DeckCreateRequest, DeckUpdateRequest, Conversation, ConversationCreate, ChatMessage } from "@/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
@@ -185,6 +185,105 @@ class APIClient {
   }> {
     return this.request(`/ai/quick-tips/${id}`, {
       method: "POST",
+    });
+  }
+
+  // Chat
+  async createConversation(data: ConversationCreate): Promise<Conversation> {
+    return this.request<Conversation>("/chat/conversations", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getConversations(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<Conversation[]> {
+    const query = new URLSearchParams(
+      Object.entries(params || {})
+        .filter(([_, v]) => v !== undefined)
+        .map(([k, v]) => [k, String(v)])
+    );
+    return this.request<Conversation[]>(`/chat/conversations?${query}`);
+  }
+
+  async getConversation(id: string): Promise<Conversation> {
+    return this.request<Conversation>(`/chat/conversations/${id}`);
+  }
+
+  async deleteConversation(id: string): Promise<void> {
+    return this.request<void>(`/chat/conversations/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  async getMessages(
+    conversationId: string,
+    params?: { limit?: number; offset?: number }
+  ): Promise<ChatMessage[]> {
+    const query = new URLSearchParams(
+      Object.entries(params || {})
+        .filter(([_, v]) => v !== undefined)
+        .map(([k, v]) => [k, String(v)])
+    );
+    return this.request<ChatMessage[]>(
+      `/chat/conversations/${conversationId}/messages?${query}`
+    );
+  }
+
+  getMessageStreamUrl(conversationId: string): string {
+    return `${API_BASE_URL}/chat/conversations/${conversationId}/messages`;
+  }
+
+  // Settings
+  async validateApiKey(
+    provider: string,
+    apiKey: string,
+    localUrl?: string
+  ): Promise<{ valid: boolean; provider: string; error?: string }> {
+    return this.request("/settings/validate-key", {
+      method: "POST",
+      body: JSON.stringify({
+        provider,
+        api_key: apiKey,
+        local_url: localUrl || undefined,
+      }),
+    });
+  }
+
+  async getProvidersWithKeys(
+    apiKeys?: Record<string, string>
+  ): Promise<{
+    default_provider: string;
+    providers: Array<{
+      id: string;
+      name: string;
+      available: boolean;
+      default_model: string;
+      models: string[];
+    }>;
+  }> {
+    return this.request("/settings/providers", {
+      method: "POST",
+      body: JSON.stringify({
+        api_keys: apiKeys || {},
+      }),
+    });
+  }
+
+  async fetchModels(
+    provider: string,
+    apiKey?: string,
+    localUrl?: string
+  ): Promise<{ provider: string; models: string[]; source: string }> {
+    return this.request("/settings/models", {
+      method: "POST",
+      body: JSON.stringify({
+        provider,
+        api_key: apiKey || undefined,
+        local_url: localUrl || undefined,
+      }),
     });
   }
 }

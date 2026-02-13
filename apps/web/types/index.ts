@@ -76,3 +76,38 @@ export interface DeckUpdateRequest {
     quantity: number;
   }[];
 }
+
+// Chat types
+
+export interface ChatMessage {
+  id: string;
+  conversation_id: string;
+  role: "user" | "assistant" | "tool" | "system";
+  content: string | null;
+  tool_calls?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface Conversation {
+  id: string;
+  title: string | null;
+  context: Record<string, unknown> | null;
+  provider: string | null;
+  model: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  messages?: ChatMessage[];
+}
+
+export interface ConversationCreate {
+  title?: string;
+  context?: Record<string, unknown>;
+  provider?: string;
+  model?: string;
+}
+
+export interface SSEEvent {
+  type: "thinking" | "tool_use" | "tool_result" | "token" | "done" | "error";
+  data: Record<string, unknown>;
+}

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import ChatButton from "@/components/chat/ChatButton";
+import ChatWindow from "@/components/chat/ChatWindow";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -46,6 +48,12 @@ export default function RootLayout({
                     >
                       Decks
                     </a>
+                    <a
+                      href="/settings"
+                      className="px-4 py-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-all text-sm"
+                    >
+                      Settings
+                    </a>
                   </div>
                 </div>
               </div>
@@ -54,6 +62,8 @@ export default function RootLayout({
             {/* Main content with nav offset */}
             <main className="pt-20 pb-8">{children}</main>
           </div>
+          <ChatButton />
+          <ChatWindow />
         </Providers>
       </body>
     </html>

@@ -27,6 +27,8 @@ dependencies = [
     "httpx>=0.26.0",
     "qdrant-client>=1.7.0",
     "email-validator>=2.0.0",
+    "sse-starlette>=1.6.0",
+    "langchain-text-splitters>=0.0.1",
 ]
 
 [project.optional-dependencies]

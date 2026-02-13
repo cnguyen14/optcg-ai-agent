@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.config import settings
-from app.api.v1 import cards, decks, ai
+from app.config import settings as app_settings
+from app.api.v1 import cards, decks, ai, chat
+from app.api.v1 import settings as settings_router_module
 import logging
 
 # Configure logging
@@ -20,16 +21,18 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=app_settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Include routers
-app.include_router(cards.router, prefix=f"{settings.api_v1_prefix}/cards", tags=["cards"])
-app.include_router(decks.router, prefix=f"{settings.api_v1_prefix}/decks", tags=["decks"])
-app.include_router(ai.router, prefix=f"{settings.api_v1_prefix}/ai", tags=["ai"])
+app.include_router(cards.router, prefix=f"{app_settings.api_v1_prefix}/cards", tags=["cards"])
+app.include_router(decks.router, prefix=f"{app_settings.api_v1_prefix}/decks", tags=["decks"])
+app.include_router(ai.router, prefix=f"{app_settings.api_v1_prefix}/ai", tags=["ai"])
+app.include_router(chat.router, prefix=f"{app_settings.api_v1_prefix}/chat", tags=["chat"])
+app.include_router(settings_router_module.router, prefix=f"{app_settings.api_v1_prefix}/settings", tags=["settings"])
 
 
 @app.get("/")
@@ -55,5 +58,5 @@ if __name__ == "__main__":
         "app.main:app",
         host="0.0.0.0",
         port=8000,
-        reload=settings.debug,
+        reload=app_settings.debug,
     )

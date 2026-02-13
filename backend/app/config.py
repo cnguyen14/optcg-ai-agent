@@ -16,6 +16,11 @@ class Settings(BaseSettings):
 
     # Qdrant
     qdrant_url: str = "http://localhost:6333"
+    embedding_model: str = "text-embedding-3-small"
+
+    # Local AI (Ollama, LM Studio, etc.)
+    local_url: str = ""
+    local_api_key: str = ""
 
     # AI Provider API Keys
     anthropic_api_key: str = ""
