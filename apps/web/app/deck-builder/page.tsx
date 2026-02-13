@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useDeckBuilder } from "@/lib/stores/deckBuilderStore";
 import { api } from "@/lib/api/client";
@@ -21,7 +21,14 @@ const COLOR_MAP: Record<string, string> = {
 export default function DeckBuilderPage() {
   const searchParams = useSearchParams();
   const deckIdParam = searchParams.get("deckId");
-  const { loadDeck, deckId } = useDeckBuilder();
+  const { loadDeck, clearDeck, deckId } = useDeckBuilder();
+
+  // Clear store when navigating to /deck-builder without a deckId (new deck)
+  useEffect(() => {
+    if (!deckIdParam && deckId) {
+      clearDeck();
+    }
+  }, [deckIdParam, deckId, clearDeck]);
 
   const { data: existingDeck } = useQuery({
     queryKey: ["deck", deckIdParam],
@@ -52,6 +59,7 @@ export default function DeckBuilderPage() {
 
 function DeckToolbar() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const {
     deckName,
     setDeckName,
@@ -104,6 +112,7 @@ function DeckToolbar() {
         });
         setDeckId(deck.id);
       }
+      queryClient.invalidateQueries({ queryKey: ["decks"] });
       router.push("/decks");
     } catch (error) {
       alert(`Error saving deck: ${error}`);
@@ -424,7 +433,7 @@ function CardSearchPanel() {
                     <InfoIcon />
                   </button>
                 </div>
-                <p className="text-[10px] text-center mt-1 truncate text-white/50">
+                <p className="text-xs font-medium text-center mt-1.5 truncate text-white/70">
                   {leader.name}
                 </p>
               </div>
@@ -527,7 +536,7 @@ function SearchCardItem({
             <InfoIcon />
           </button>
         </div>
-        <p className="text-[10px] text-center mt-1 truncate text-white/50">
+        <p className="text-xs font-medium text-center mt-1.5 truncate text-white/70">
           {card.name}
         </p>
       </div>

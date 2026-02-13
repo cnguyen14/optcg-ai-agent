@@ -131,6 +131,63 @@
   }
 }
 
+@keyframes breathGreen {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(52, 211, 153, 0.1);
+    border-color: rgba(52, 211, 153, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(52, 211, 153, 0.3);
+    border-color: rgba(52, 211, 153, 0.55);
+  }
+}
+
+@keyframes breathGreenDot {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes breathAmber {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.1);
+    border-color: rgba(251, 191, 36, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(251, 191, 36, 0.3);
+    border-color: rgba(251, 191, 36, 0.55);
+  }
+}
+
+@keyframes breathAmberDot {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+.animate-breath-green {
+  animation: breathGreen 3s ease-in-out infinite;
+}
+.animate-breath-green-dot {
+  animation: breathGreenDot 3s ease-in-out infinite;
+}
+.animate-breath-amber {
+  animation: breathAmber 2.5s ease-in-out infinite;
+}
+.animate-breath-amber-dot {
+  animation: breathAmberDot 2.5s ease-in-out infinite;
+}
+
 @layer components {
   /* Base glass panel */
   .glass {
