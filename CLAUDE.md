@@ -279,6 +279,35 @@ The `DeckAnalysisState` TypedDict is **not validated** by Pydantic - it's a pure
 
 The deck builder store (`useDeckBuilder`) does **not persist to localStorage**. Refreshing the page loses the deck. To save, user must explicitly click "Save Deck" which calls the API.
 
+### UI Component Patterns
+
+#### Shared Card Components (`apps/web/components/ui/`)
+
+- **CardTooltip.tsx** — Hover tooltip (200ms delay), auto-positions left/right based on viewport edge. Wraps any card/leader element.
+- **CardDetailModal.tsx** — Full-detail modal with two-column layout (image + stats). Supports `mode="browse"` or `mode="deck-builder"` (shows Add to Deck button). Closes via X/backdrop/Escape.
+- **CardTextFormatter.tsx** — Parses `[bracketed keywords]` (e.g. `[On Play]`, `[Once Per Turn]`) in card effect text and renders them as styled sky-blue badges. Used in both tooltip and modal.
+
+#### Liquid Glass Design System
+
+All UI uses custom glass-morphism classes defined in `globals.css`:
+- `.glass` — Standard panel with blur + translucent background
+- `.glass-heavy` — Heavier blur for nav/prominent panels
+- `.glass-card` — Card with hover lift animation
+- `.glass-tooltip` — Lighter variant for tooltips
+- `.glass-btn-primary` / `.glass-btn-secondary` — Button styles
+- `.glass-input` / `.glass-select` — Form element styles
+- `.gradient-text` — White-to-cyan gradient for headings
+
+#### UX Conventions
+
+- **No browser dialogs**: Use inline confirmation buttons (Confirm/Cancel) instead of `confirm()` or `alert()`. See decks page and deck builder Clear button for examples.
+- **Deck builder click-to-add**: Clicking a card in the search panel adds it to the deck directly. Use the info icon (magnifying glass) on hover to open the detail modal instead.
+- **Fixed navbar offset**: The nav is `fixed top-3` with `~64px` height. Layout provides `pt-20` (80px). Full-height pages like deck builder must account for this with appropriate margin/height calc.
+
+### API Client Notes
+
+The API client (`apps/web/lib/api/client.ts`) handles `204 No Content` responses by returning `undefined` instead of calling `response.json()`. This is critical for DELETE endpoints. If adding new void-returning endpoints, they will work automatically.
+
 ## Common Issues
 
 ### "Port already allocated" during docker-compose up
