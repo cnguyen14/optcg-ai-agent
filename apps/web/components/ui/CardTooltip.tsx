@@ -21,11 +21,32 @@ export default function CardTooltip({ card, children }: CardTooltipProps) {
 
   const showTooltip = useCallback(() => {
     timeoutRef.current = setTimeout(() => {
-      // Check if tooltip would overflow the right edge
       if (wrapperRef.current) {
         const rect = wrapperRef.current.getBoundingClientRect();
-        const spaceRight = window.innerWidth - rect.right;
-        setPosition(spaceRight < 280 ? "left" : "right");
+        const tooltipWidth = 272; // w-64 (256px) + ml-2 (8px) + buffer
+
+        // Find the closest scrollable/overflow ancestor
+        let containerRight = window.innerWidth;
+        let parent = wrapperRef.current.parentElement;
+        while (parent) {
+          const style = window.getComputedStyle(parent);
+          const overflowX = style.overflowX;
+          const overflowY = style.overflowY;
+          if (
+            overflowX === "auto" ||
+            overflowX === "scroll" ||
+            overflowX === "hidden" ||
+            overflowY === "auto" ||
+            overflowY === "scroll"
+          ) {
+            containerRight = parent.getBoundingClientRect().right;
+            break;
+          }
+          parent = parent.parentElement;
+        }
+
+        const spaceRight = containerRight - rect.right;
+        setPosition(spaceRight < tooltipWidth ? "left" : "right");
       }
       setVisible(true);
     }, 200);

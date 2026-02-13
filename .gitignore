@@ -54,3 +54,4 @@ htmlcov/
 # TypeScript build info
 *.tsbuildinfo
 .serena/
+localAIprovider.md
