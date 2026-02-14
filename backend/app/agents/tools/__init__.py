@@ -8,8 +8,8 @@ from app.agents.tools.calculate_stats import CalculateStatsTool
 from app.agents.tools.set_deck_leader import SetDeckLeaderTool
 from app.agents.tools.add_cards_to_deck import AddCardsToDeckTool
 from app.agents.tools.remove_cards_from_deck import RemoveCardsFromDeckTool
-from app.agents.tools.query_data import QueryDataTool
-from app.agents.tools.modify_deck import ModifyDeckTool
+from app.agents.tools.manage_deck import ManageDeckTool
+from app.agents.tools.analyze_strategy import AnalyzeStrategyTool
 
 __all__ = [
     "ResponseTool",
@@ -21,6 +21,6 @@ __all__ = [
     "SetDeckLeaderTool",
     "AddCardsToDeckTool",
     "RemoveCardsFromDeckTool",
-    "QueryDataTool",
-    "ModifyDeckTool",
+    "ManageDeckTool",
+    "AnalyzeStrategyTool",
 ]

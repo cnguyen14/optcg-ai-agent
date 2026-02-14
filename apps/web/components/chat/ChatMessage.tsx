@@ -16,7 +16,7 @@ export default function ChatMessage({ message }: ChatMessageProps) {
         className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
           isUser
             ? "bg-sky-500/30 text-white rounded-br-md"
-            : "bg-white/5 text-white/90 rounded-bl-md"
+            : "bg-white/[0.08] text-gray-100 rounded-bl-md"
         }`}
       >
         {isUser ? (

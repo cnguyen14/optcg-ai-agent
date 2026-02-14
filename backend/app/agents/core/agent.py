@@ -18,8 +18,9 @@ logger = logging.getLogger(__name__)
 MAX_ITERATIONS = 15
 HISTORY_WINDOW = 20  # messages kept in the loop
 
-# Main agent only sees orchestration tools — sub-agents handle the rest
-MAIN_AGENT_TOOLS = ["query_data", "modify_deck", "response"]
+# Main agent tools — search and manage_deck are instant (no LLM sub-agents),
+# analyze_strategy invokes a strategy agent for complex deck building.
+MAIN_AGENT_TOOLS = ["search_cards", "manage_deck", "analyze_strategy", "search_knowledge", "response"]
 
 
 class OPTCGAgent:
@@ -113,10 +114,14 @@ class OPTCGAgent:
                     tool_args = tool_call["args"]
 
                     # Emit thinking event with descriptive label
-                    if tool_name == "query_data":
-                        thought = f"Querying data: {tool_args.get('task', '')[:100]}"
-                    elif tool_name == "modify_deck":
-                        thought = f"Modifying deck: {tool_args.get('task', '')[:100]}"
+                    if tool_name == "search_cards":
+                        thought = f"Searching cards: {tool_args.get('name', tool_args.get('type', ''))}"
+                    elif tool_name == "manage_deck":
+                        thought = f"Modifying deck: {tool_args.get('action', '')}"
+                    elif tool_name == "analyze_strategy":
+                        thought = f"Analyzing strategy: {tool_args.get('task', '')[:80]}"
+                    elif tool_name == "search_knowledge":
+                        thought = f"Looking up rules: {tool_args.get('query', '')[:80]}"
                     else:
                         thought = f"Using {tool_name} tool..."
                     yield {

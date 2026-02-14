@@ -219,6 +219,8 @@ function CardSearchPanel() {
   const [filtersExpanded, setFiltersExpanded] = useState(true);
   const [detailCard, setDetailCard] = useState<Card | Leader | null>(null);
   const { addCard, setLeader, cards: deckCards } = useDeckBuilder();
+  const agentResults = useDeckBuilder((s) => s.agentResults);
+  const clearAgentResults = useDeckBuilder((s) => s.clearAgentResults);
 
   // Track recently added card IDs for animation feedback
   const [recentlyAdded, setRecentlyAdded] = useState<Set<string>>(new Set());
@@ -412,8 +414,73 @@ function CardSearchPanel() {
         </div>
       )}
 
+      {/* Agent results banner */}
+      {agentResults && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-sky-500/15 border border-sky-400/30">
+          <span className="text-xs text-sky-300 font-medium flex-1">
+            Agent found {agentResults.length} card{agentResults.length !== 1 ? "s" : ""}
+          </span>
+          <button
+            onClick={clearAgentResults}
+            className="text-xs text-white/50 hover:text-white/80 transition-colors px-2 py-0.5 rounded bg-white/5 hover:bg-white/10"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Card/Leader image grid */}
-      {showLeaders ? (
+      {agentResults ? (
+        <div className="grid grid-cols-4 gap-2">
+          {agentResults.map((item) =>
+            "life" in item ? (
+              <CardTooltip key={item.id} card={item}>
+                <div
+                  onClick={() => setLeader(item as Leader)}
+                  className="cursor-pointer group"
+                >
+                  <div className="relative aspect-[2.5/3.5] rounded overflow-hidden border border-white/10 hover:border-sky-400/50 transition-all group-hover:scale-105">
+                    {item.image_url ? (
+                      <img
+                        src={item.image_url}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-white/5 flex items-center justify-center text-xs text-white/40">
+                        No img
+                      </div>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDetailCard(item);
+                      }}
+                      className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="View details"
+                    >
+                      <InfoIcon />
+                    </button>
+                  </div>
+                  <p className="text-xs font-medium text-center mt-1.5 truncate text-white/70">
+                    {item.name}
+                  </p>
+                </div>
+              </CardTooltip>
+            ) : (
+              <SearchCardItem
+                key={item.id}
+                card={item as Card}
+                quantity={deckQuantities[item.id] || 0}
+                recentlyAdded={recentlyAdded.has(item.id)}
+                onAdd={() => handleAddCard(item as Card)}
+                onShowDetail={() => setDetailCard(item)}
+              />
+            )
+          )}
+        </div>
+      ) : showLeaders ? (
         <div className="grid grid-cols-4 gap-2">
           {leaders?.map((leader) => (
             <CardTooltip key={leader.id} card={leader}>

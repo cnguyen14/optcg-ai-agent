@@ -82,7 +82,7 @@ export default function MarkdownContent({ content }: MarkdownContentProps) {
           // Blockquote
           blockquote: (props: ComponentPropsWithoutRef<"blockquote">) => (
             <blockquote
-              className="border-l-2 border-white/20 pl-3 my-2 text-white/60 italic"
+              className="border-l-2 border-white/30 pl-3 my-2 text-gray-300 italic"
               {...props}
             />
           ),
@@ -102,7 +102,7 @@ export default function MarkdownContent({ content }: MarkdownContentProps) {
             <thead className="border-b border-white/20" {...props} />
           ),
           th: (props: ComponentPropsWithoutRef<"th">) => (
-            <th className="text-left px-2 py-1.5 font-semibold text-white/70" {...props} />
+            <th className="text-left px-2 py-1.5 font-semibold text-gray-200" {...props} />
           ),
           td: (props: ComponentPropsWithoutRef<"td">) => (
             <td className="px-2 py-1 border-t border-white/5" {...props} />

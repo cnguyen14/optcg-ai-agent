@@ -12,7 +12,7 @@ export default function ChatWindow() {
 
   return (
     <div
-      className={`fixed z-50 flex flex-col glass-heavy rounded-2xl shadow-2xl border border-white/10 overflow-hidden transition-all duration-300 ${
+      className={`fixed z-50 flex flex-col rounded-2xl shadow-2xl border border-white/10 overflow-hidden transition-all duration-300 bg-[#1a1e2e]/95 backdrop-blur-xl ${
         isExpanded
           ? "bottom-4 right-4 left-4 top-20"
           : "bottom-4 right-4 w-[400px] h-[600px]"

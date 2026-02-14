@@ -7,6 +7,7 @@ interface DeckBuilderState {
   cards: DeckCard[];
   deckName: string;
   deckDescription: string;
+  agentResults: (Card | Leader)[] | null;
 
   // Actions
   setDeckId: (id: string | null) => void;
@@ -18,6 +19,8 @@ interface DeckBuilderState {
   setDeckDescription: (description: string) => void;
   clearDeck: () => void;
   loadDeck: (deck: Deck) => void;
+  setAgentResults: (results: (Card | Leader)[]) => void;
+  clearAgentResults: () => void;
 
   // Computed values
   getTotalCards: () => number;
@@ -31,6 +34,7 @@ export const useDeckBuilder = create<DeckBuilderState>((set, get) => ({
   cards: [],
   deckName: "New Deck",
   deckDescription: "",
+  agentResults: null,
 
   setDeckId: (id) => set({ deckId: id }),
 
@@ -86,6 +90,9 @@ export const useDeckBuilder = create<DeckBuilderState>((set, get) => ({
 
   setDeckDescription: (description) => set({ deckDescription: description }),
 
+  setAgentResults: (results) => set({ agentResults: results }),
+  clearAgentResults: () => set({ agentResults: null }),
+
   clearDeck: () =>
     set({
       deckId: null,
@@ -93,6 +100,7 @@ export const useDeckBuilder = create<DeckBuilderState>((set, get) => ({
       cards: [],
       deckName: "New Deck",
       deckDescription: "",
+      agentResults: null,
     }),
 
   loadDeck: (deck: Deck) =>

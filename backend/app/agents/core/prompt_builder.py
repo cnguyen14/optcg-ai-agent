@@ -139,26 +139,13 @@ def build_system_prompt(
     return "\n\n---\n\n".join(s for s in sections if s.strip())
 
 
-def build_data_agent_prompt(context: dict | None = None) -> str:
-    """Build the system prompt for the data retrieval sub-agent."""
-    sub_prompt = _load_template("sub_agent_data.md")
+def build_strategy_agent_prompt(context: dict | None = None) -> str:
+    """Build the system prompt for the strategy agent."""
+    strategy_prompt = _load_template("strategy_agent.md")
     rules = _load_template("system_rules.md")
     context_block = _build_context_block(context)
 
-    sections = [sub_prompt, rules]
-    if context_block:
-        sections.append(context_block)
-
-    return "\n\n---\n\n".join(s for s in sections if s.strip())
-
-
-def build_ui_agent_prompt(context: dict | None = None) -> str:
-    """Build the system prompt for the deck modification sub-agent."""
-    sub_prompt = _load_template("sub_agent_ui.md")
-    deck_building = _load_template("system_deck_building.md")
-    context_block = _build_context_block(context)
-
-    sections = [sub_prompt, deck_building]
+    sections = [strategy_prompt, rules]
     if context_block:
         sections.append(context_block)
 

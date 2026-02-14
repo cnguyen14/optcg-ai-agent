@@ -34,8 +34,10 @@ interface ChatState {
 }
 
 const TOOL_LABELS: Record<string, string> = {
-  query_data: "Searching & analyzing",
-  modify_deck: "Modifying deck",
+  search_cards: "Searching cards",
+  manage_deck: "Modifying deck",
+  analyze_strategy: "Analyzing strategy",
+  search_knowledge: "Looking up rules",
   response: "Preparing response",
 };
 
@@ -333,6 +335,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
               case "CUSTOM":
                 if (evt.name === "thinking" && evt.value?.thoughts) {
                   set({ currentThinking: evt.value.thoughts });
+                }
+                if (evt.name === "card_results" && evt.value?.cards) {
+                  useDeckBuilder.getState().setAgentResults(evt.value.cards);
                 }
                 if (evt.name === "deck_action" && evt.value) {
                   await handleDeckAction(evt.value, get().currentDeckId);
