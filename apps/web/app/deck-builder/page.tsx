@@ -643,6 +643,9 @@ function DeckPanel() {
         </div>
       )}
 
+      {/* Radar chart */}
+      {cards.length > 0 && <DeckRadarChart cards={cards} />}
+
       {/* Deck cards grouped by type */}
       {cards.length === 0 ? (
         <div className="p-8 text-center border border-dashed border-white/20 bg-white/5 rounded-xl">
@@ -771,6 +774,191 @@ function InfoIcon() {
       <circle cx="7" cy="7" r="5" />
       <line x1="11" y1="11" x2="14" y2="14" />
     </svg>
+  );
+}
+
+// --- Radar Chart ---
+
+const RADAR_AXES = [
+  { key: "aggression", label: "AGG", name: "Aggression", desc: "Power-to-cost ratio" },
+  { key: "speed", label: "SPD", name: "Speed", desc: "Low-cost cards (0–3)" },
+  { key: "defense", label: "DEF", name: "Defense", desc: "Counter ability" },
+  { key: "endgame", label: "END", name: "Endgame", desc: "High-cost cards (7+)" },
+  { key: "versatility", label: "VRS", name: "Versatility", desc: "Events & stages" },
+] as const;
+
+function computeDeckScores(
+  cards: { card: Card; quantity: number }[]
+): Record<string, number> {
+  const zero = { aggression: 0, speed: 0, defense: 0, endgame: 0, versatility: 0 };
+  if (cards.length === 0) return zero;
+
+  const allCards = cards.flatMap((dc) => Array(dc.quantity).fill(dc.card) as Card[]);
+  const total = allCards.length;
+  if (total === 0) return zero;
+
+  const characters = allCards.filter((c) => c.type === "Character");
+
+  // Aggression: avg power-to-cost ratio of characters, scaled
+  const aggression =
+    characters.length > 0
+      ? Math.min(
+          10,
+          (characters.reduce(
+            (s, c) => s + (c.power ?? 0) / Math.max(c.cost ?? 1, 1),
+            0
+          ) /
+            characters.length) *
+            2
+        )
+      : 0;
+
+  // Speed: % of cards costing 0–3
+  const lowCost = allCards.filter((c) => (c.cost ?? 0) <= 3).length;
+  const speed = (lowCost / total) * 10;
+
+  // Defense: avg counter of cards with counter > 0, normalized
+  const withCounter = allCards.filter((c) => (c.counter ?? 0) > 0);
+  const defense =
+    withCounter.length > 0
+      ? Math.min(
+          10,
+          ((withCounter.reduce((s, c) => s + (c.counter ?? 0), 0) /
+            withCounter.length) /
+            200) *
+            10
+        )
+      : 0;
+
+  // Endgame: % of cards costing 7+
+  const highCost = allCards.filter((c) => (c.cost ?? 0) >= 7).length;
+  const endgame = Math.min(10, (highCost / total) * 33.3);
+
+  // Versatility: % of non-character cards
+  const nonChar = allCards.filter((c) => c.type !== "Character").length;
+  const versatility = Math.min(10, (nonChar / total) * 25);
+
+  return { aggression, speed, defense, endgame, versatility };
+}
+
+/** Returns polygon point for a given axis index, value (0–10), and radius */
+function radarPoint(index: number, value: number, radius: number): [number, number] {
+  const angle = (Math.PI * 2 * index) / 5 - Math.PI / 2;
+  const r = (value / 10) * radius;
+  return [100 + r * Math.cos(angle), 100 + r * Math.sin(angle)];
+}
+
+function DeckRadarChart({ cards }: { cards: { card: Card; quantity: number }[] }) {
+  const scores = computeDeckScores(cards);
+  const R = 70; // max radius
+
+  // Build grid pentagons (33%, 66%, 100%)
+  const gridLevels = [0.33, 0.66, 1];
+  const gridPaths = gridLevels.map((level) => {
+    const pts = RADAR_AXES.map((_, i) => radarPoint(i, 10 * level, R));
+    return pts.map((p) => p.join(",")).join(" ");
+  });
+
+  // Axis lines from center to each vertex
+  const axisLines = RADAR_AXES.map((_, i) => radarPoint(i, 10, R));
+
+  // Data polygon
+  const dataPoints = RADAR_AXES.map((a, i) =>
+    radarPoint(i, scores[a.key], R)
+  );
+  const dataPath = dataPoints.map((p) => p.join(",")).join(" ");
+
+  // Label positions (slightly beyond the outer ring)
+  const labelPoints = RADAR_AXES.map((_, i) => radarPoint(i, 10, R + 16));
+
+  return (
+    <div className="glass rounded-xl p-3">
+      <p className="text-[10px] text-white/40 mb-1">Deck Profile</p>
+      <div className="flex items-center gap-3">
+        {/* Chart */}
+        <svg viewBox="0 0 200 200" className="w-[160px] shrink-0">
+          {/* Grid pentagons */}
+          {gridPaths.map((pts, i) => (
+            <polygon
+              key={i}
+              points={pts}
+              fill="none"
+              stroke="rgba(255,255,255,0.08)"
+              strokeWidth="0.5"
+            />
+          ))}
+
+          {/* Axis lines */}
+          {axisLines.map(([x, y], i) => (
+            <line
+              key={i}
+              x1={100}
+              y1={100}
+              x2={x}
+              y2={y}
+              stroke="rgba(255,255,255,0.06)"
+              strokeWidth="0.5"
+            />
+          ))}
+
+          {/* Data polygon */}
+          <polygon
+            points={dataPath}
+            fill="rgba(56,189,248,0.15)"
+            stroke="rgba(56,189,248,0.5)"
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+            style={{ transition: "all 300ms ease" }}
+          />
+
+          {/* Data points */}
+          {dataPoints.map(([x, y], i) => (
+            <circle
+              key={i}
+              cx={x}
+              cy={y}
+              r={3}
+              fill="rgba(56,189,248,0.8)"
+              style={{ transition: "all 300ms ease" }}
+            />
+          ))}
+
+          {/* Labels */}
+          {RADAR_AXES.map((axis, i) => {
+            const [x, y] = labelPoints[i];
+            return (
+              <text
+                key={axis.key}
+                x={x}
+                y={y}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fill="rgba(255,255,255,0.4)"
+                fontSize="10"
+                fontFamily="monospace"
+              >
+                {axis.label}
+              </text>
+            );
+          })}
+        </svg>
+
+        {/* Legend */}
+        <div className="flex-1 space-y-1.5 min-w-0">
+          {RADAR_AXES.map((axis) => (
+            <div key={axis.key} className="flex items-baseline gap-1.5">
+              <span className="text-[10px] font-mono font-semibold text-sky-400 w-7 shrink-0">
+                {axis.label}
+              </span>
+              <div className="min-w-0">
+                <span className="text-[10px] text-white/60">{axis.name}</span>
+                <span className="text-[10px] text-white/30"> — {axis.desc}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
