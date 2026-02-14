@@ -61,7 +61,7 @@ class AddCardsToDeckTool(BaseTool):
 
         # Collect all card IDs
         card_ids = [c["card_id"] for c in cards_input]
-        quantity_map = {c["card_id"]: min(max(c.get("quantity", 1), 1), 4) for c in cards_input}
+        quantity_map = {c["card_id"]: min(max(int(c.get("quantity", 1)), 1), 4) for c in cards_input}
 
         # Fetch cards from DB
         result = await db.execute(

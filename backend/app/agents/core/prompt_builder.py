@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from app.agents.core.tool import get_all_tools
+from app.agents.core.tool import get_all_tools, get_tools_by_names
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +16,56 @@ def _load_template(filename: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def build_tool_descriptions() -> str:
-    """Build tool descriptions block from the registry."""
-    tools = get_all_tools()
+def _build_context_block(context: dict | None) -> str:
+    """Build the context block from the agent context dict."""
+    if not context:
+        return ""
+
+    parts = []
+    if context.get("deck_id"):
+        parts.append(f"- Active deck ID: {context['deck_id']}")
+    if context.get("page"):
+        parts.append(f"- User is on page: {context['page']}")
+
+    # Include deck builder state if available
+    dbs = context.get("deck_builder_state")
+    if dbs:
+        leader = dbs.get("leader")
+        total = dbs.get("total_cards", 0)
+        cards = dbs.get("cards", [])
+
+        parts.append("")
+        parts.append("### Deck Builder State")
+        if leader:
+            parts.append(f"- Leader: {leader.get('name', '?')} ({leader.get('id', '?')}) — Colors: {', '.join(leader.get('colors', []))}")
+        else:
+            parts.append("- Leader: Not set")
+        parts.append(f"- Total cards: {total}/50")
+
+        if cards:
+            card_lines = []
+            for c in cards[:25]:
+                card_lines.append(f"  - {c.get('quantity', 1)}x {c.get('name', '?')} ({c.get('id', '?')}) [{c.get('type', '?')}, Cost {c.get('cost', '?')}, {c.get('color', '?')}]")
+            parts.append("- Cards in deck:")
+            parts.extend(card_lines)
+            if len(cards) > 25:
+                parts.append(f"  - ... and {len(cards) - 25} more cards")
+
+    if parts:
+        return "## Current Context\n" + "\n".join(parts)
+    return ""
+
+
+def build_tool_descriptions(tool_names: list[str] | None = None) -> str:
+    """Build tool descriptions block from the registry.
+
+    If tool_names is provided, only describe those tools.
+    """
+    if tool_names:
+        tools = get_tools_by_names(tool_names)
+    else:
+        tools = get_all_tools()
+
     if not tools:
         return "No tools available."
 
@@ -45,15 +92,17 @@ def build_tool_descriptions() -> str:
 def build_system_prompt(
     context: dict | None = None,
     memories: list[dict] | None = None,
+    tool_names: list[str] | None = None,
 ) -> str:
     """Assemble the full system prompt from templates + dynamic data."""
     role = _load_template("system_role.md")
     rules = _load_template("system_rules.md")
     communication = _load_template("system_communication.md")
     tips = _load_template("system_tips.md")
+    orchestrator = _load_template("system_orchestrator.md")
 
     # Build tool descriptions
-    tool_desc = build_tool_descriptions()
+    tool_desc = build_tool_descriptions(tool_names=tool_names)
 
     # Build memories block
     memories_block = ""
@@ -64,40 +113,7 @@ def build_system_prompt(
         memories_block = "## Recalled Knowledge\n" + "\n".join(chunks)
 
     # Build context block
-    context_block = ""
-    if context:
-        parts = []
-        if context.get("deck_id"):
-            parts.append(f"- Active deck ID: {context['deck_id']}")
-        if context.get("page"):
-            parts.append(f"- User is on page: {context['page']}")
-
-        # Include deck builder state if available
-        dbs = context.get("deck_builder_state")
-        if dbs:
-            leader = dbs.get("leader")
-            total = dbs.get("total_cards", 0)
-            cards = dbs.get("cards", [])
-
-            parts.append("")
-            parts.append("### Deck Builder State")
-            if leader:
-                parts.append(f"- Leader: {leader.get('name', '?')} ({leader.get('id', '?')}) — Colors: {', '.join(leader.get('colors', []))}")
-            else:
-                parts.append("- Leader: Not set")
-            parts.append(f"- Total cards: {total}/50")
-
-            if cards:
-                card_lines = []
-                for c in cards[:25]:
-                    card_lines.append(f"  - {c.get('quantity', 1)}x {c.get('name', '?')} ({c.get('id', '?')}) [{c.get('type', '?')}, Cost {c.get('cost', '?')}, {c.get('color', '?')}]")
-                parts.append("- Cards in deck:")
-                parts.extend(card_lines)
-                if len(cards) > 25:
-                    parts.append(f"  - ... and {len(cards) - 25} more cards")
-
-        if parts:
-            context_block = "## Current Context\n" + "\n".join(parts)
+    context_block = _build_context_block(context)
 
     # Conditionally load deck building prompt
     deck_building = ""
@@ -111,6 +127,7 @@ def build_system_prompt(
         f"## Available Tools\n\n{tool_desc}",
         communication,
         tips,
+        orchestrator,
     ]
     if deck_building:
         sections.append(deck_building)
@@ -118,5 +135,31 @@ def build_system_prompt(
         sections.append(context_block)
     if memories_block:
         sections.append(memories_block)
+
+    return "\n\n---\n\n".join(s for s in sections if s.strip())
+
+
+def build_data_agent_prompt(context: dict | None = None) -> str:
+    """Build the system prompt for the data retrieval sub-agent."""
+    sub_prompt = _load_template("sub_agent_data.md")
+    rules = _load_template("system_rules.md")
+    context_block = _build_context_block(context)
+
+    sections = [sub_prompt, rules]
+    if context_block:
+        sections.append(context_block)
+
+    return "\n\n---\n\n".join(s for s in sections if s.strip())
+
+
+def build_ui_agent_prompt(context: dict | None = None) -> str:
+    """Build the system prompt for the deck modification sub-agent."""
+    sub_prompt = _load_template("sub_agent_ui.md")
+    deck_building = _load_template("system_deck_building.md")
+    context_block = _build_context_block(context)
+
+    sections = [sub_prompt, deck_building]
+    if context_block:
+        sections.append(context_block)
 
     return "\n\n---\n\n".join(s for s in sections if s.strip())

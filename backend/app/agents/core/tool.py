@@ -74,3 +74,8 @@ def get_tool_class(name: str) -> type[BaseTool] | None:
 
 def get_all_tools() -> dict[str, type[BaseTool]]:
     return dict(_TOOL_REGISTRY)
+
+
+def get_tools_by_names(names: list[str]) -> dict[str, type[BaseTool]]:
+    """Return a subset of registered tools filtered by name."""
+    return {n: _TOOL_REGISTRY[n] for n in names if n in _TOOL_REGISTRY}

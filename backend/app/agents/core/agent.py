@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.core.prompt_builder import build_system_prompt
-from app.agents.core.tool import get_tool_class, get_all_tools, ToolResponse
+from app.agents.core.tool import get_tools_by_names, ToolResponse
 from app.services.conversation_service import ConversationService
 from app.services.knowledge_service import KnowledgeService
 from app.services.memory_service import MemoryService
@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 MAX_ITERATIONS = 15
 HISTORY_WINDOW = 20  # messages kept in the loop
+
+# Main agent only sees orchestration tools — sub-agents handle the rest
+MAIN_AGENT_TOOLS = ["query_data", "modify_deck", "response"]
 
 
 class OPTCGAgent:
@@ -67,6 +70,7 @@ class OPTCGAgent:
         system_prompt = build_system_prompt(
             context=self.context,
             memories=memories,
+            tool_names=MAIN_AGENT_TOOLS,
         )
 
         # 3. Load conversation history
@@ -90,33 +94,34 @@ class OPTCGAgent:
             try:
                 tool_schemas = self._get_tool_schemas()
 
-                # Stream LLM response — yields (text_so_far, tool_call_or_none)
-                # For text responses, we yield tokens in real-time.
-                # For tool calls, we accumulate and process.
+                # Stream LLM response — buffer text until we know if a tool call follows.
+                # Intermediate reasoning text is discarded; only text-only responses are yielded.
                 streamed_text = ""
                 tool_call = None
-                has_yielded_tokens = False
 
                 async for chunk_text, chunk_tool_calls in self._stream_llm_with_tools(
                     messages, tool_schemas
                 ):
                     if chunk_text:
                         streamed_text += chunk_text
-                        has_yielded_tokens = True
-                        yield {"type": "token", "data": {"text": chunk_text}}
 
                     if chunk_tool_calls:
-                        # First tool call found — this is a tool-using response
                         tool_call = chunk_tool_calls
 
                 if tool_call:
                     tool_name = tool_call["name"]
                     tool_args = tool_call["args"]
 
-                    # Emit thinking event
+                    # Emit thinking event with descriptive label
+                    if tool_name == "query_data":
+                        thought = f"Querying data: {tool_args.get('task', '')[:100]}"
+                    elif tool_name == "modify_deck":
+                        thought = f"Modifying deck: {tool_args.get('task', '')[:100]}"
+                    else:
+                        thought = f"Using {tool_name} tool..."
                     yield {
                         "type": "thinking",
-                        "data": {"thoughts": [f"Using {tool_name} tool..."]},
+                        "data": {"thoughts": [thought]},
                     }
 
                     # Emit tool_use event
@@ -159,7 +164,9 @@ class OPTCGAgent:
                         "content": result.message,
                     })
                 else:
-                    # No tool call — text is the final response
+                    # No tool call — text is the final response, yield it now
+                    if streamed_text:
+                        yield {"type": "token", "data": {"text": streamed_text}}
                     final_text = streamed_text
                     break
 
@@ -202,7 +209,7 @@ class OPTCGAgent:
 
     def _get_tool_schemas(self) -> list[dict]:
         """Get tool schemas formatted for LangChain tool calling."""
-        tools = get_all_tools()
+        tools = get_tools_by_names(MAIN_AGENT_TOOLS)
         return [tool_cls.schema() for tool_cls in tools.values()]
 
     def _to_lc_messages(self, messages: list[dict]) -> list:
@@ -322,8 +329,9 @@ class OPTCGAgent:
         return str(response)
 
     async def _execute_tool(self, name: str, args: dict) -> ToolResponse:
-        """Look up and execute a registered tool."""
-        tool_cls = get_tool_class(name)
+        """Look up and execute a registered tool (main agent tools only)."""
+        main_tools = get_tools_by_names(MAIN_AGENT_TOOLS)
+        tool_cls = main_tools.get(name)
         if not tool_cls:
             return ToolResponse(message=f"Unknown tool: {name}")
 

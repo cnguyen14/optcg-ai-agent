@@ -33,6 +33,16 @@ interface ChatState {
   loadConversation: (conversationId: string) => Promise<void>;
 }
 
+const TOOL_LABELS: Record<string, string> = {
+  query_data: "Searching & analyzing",
+  modify_deck: "Modifying deck",
+  response: "Preparing response",
+};
+
+function getToolLabel(toolName: string): string {
+  return TOOL_LABELS[toolName] || toolName;
+}
+
 async function handleDeckAction(
   action: {
     action: string;
@@ -63,6 +73,11 @@ async function handleDeckAction(
       break;
     case "remove_cards":
       action.card_ids?.forEach((id) => db.removeCard(id));
+      break;
+    case "batch_deck_update":
+      for (const subAction of (action as any).actions || []) {
+        await handleDeckAction(subAction, deckId);
+      }
       break;
   }
 }
@@ -268,7 +283,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
               case "TOOL_CALL_START":
                 toolArgs = "";
+                fullText = "";  // Discard intermediate reasoning text
                 set((s) => ({
+                  streamingText: "",
                   currentToolUse: {
                     tool: evt.toolCallName,
                     args: {},
@@ -280,7 +297,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     {
                       id: `tool-${Date.now()}`,
                       type: "tool" as const,
-                      label: evt.toolCallName,
+                      label: getToolLabel(evt.toolCallName),
                       status: "active" as const,
                     },
                   ],
