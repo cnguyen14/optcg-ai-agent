@@ -107,6 +107,12 @@ class AGUIAdapter:
                             role="tool",
                         )
                     )
+                    # Emit deck_action CustomEvent if tool returned action_data
+                    action_data = data.get("action_data")
+                    if action_data:
+                        yield self.encoder.encode(
+                            CustomEvent(name="deck_action", value=action_data)
+                        )
                     tool_idx += 1
 
                 elif etype == "error":

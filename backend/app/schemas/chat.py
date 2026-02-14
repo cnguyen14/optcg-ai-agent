@@ -42,5 +42,20 @@ class MessageResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ConversationSummary(BaseModel):
+    id: UUID
+    title: str | None
+    context: dict | None
+    provider: str | None
+    model: str | None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    message_count: int = 0
+    first_message_preview: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class ConversationWithMessages(ConversationResponse):
     messages: list[MessageResponse] = []

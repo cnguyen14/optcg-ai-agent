@@ -129,9 +129,12 @@ class OPTCGAgent:
                     result = await self._execute_tool(tool_name, tool_args)
 
                     # Emit tool_result event
+                    tool_result_data = {"tool": tool_name, "result": result.message[:500]}
+                    if result.data:
+                        tool_result_data["action_data"] = result.data
                     yield {
                         "type": "tool_result",
-                        "data": {"tool": tool_name, "result": result.message[:500]},
+                        "data": tool_result_data,
                     }
 
                     if result.break_loop:

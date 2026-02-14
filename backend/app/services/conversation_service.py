@@ -3,7 +3,7 @@ import logging
 from uuid import UUID
 
 import redis.asyncio as aioredis
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func, literal_column
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -72,6 +72,98 @@ class ConversationService:
             .options(selectinload(Conversation.messages))
         )
         return result.scalar_one_or_none()
+
+    async def get_conversation_by_deck(
+        self, db: AsyncSession, deck_id: str
+    ) -> Conversation | None:
+        """Get the most recent conversation for a given deck."""
+        result = await db.execute(
+            select(Conversation)
+            .where(Conversation.context["deck_id"].astext == deck_id)
+            .options(selectinload(Conversation.messages))
+            .order_by(desc(Conversation.updated_at))
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def list_conversations_by_deck(
+        self,
+        db: AsyncSession,
+        deck_id: str,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[dict]:
+        """List all conversations for a deck with message count and preview."""
+        # Subquery for message count per conversation
+        count_sq = (
+            select(
+                Message.conversation_id,
+                func.count(Message.id).label("message_count"),
+            )
+            .group_by(Message.conversation_id)
+            .subquery()
+        )
+
+        # Subquery for first user message preview
+        # Use row_number to pick the earliest user message per conversation
+        row_num = (
+            func.row_number()
+            .over(
+                partition_by=Message.conversation_id,
+                order_by=Message.created_at,
+            )
+            .label("rn")
+        )
+        first_msg_sq = (
+            select(
+                Message.conversation_id,
+                Message.content.label("first_message_preview"),
+                row_num,
+            )
+            .where(Message.role == "user")
+            .subquery()
+        )
+        first_user = (
+            select(
+                first_msg_sq.c.conversation_id,
+                first_msg_sq.c.first_message_preview,
+            )
+            .where(first_msg_sq.c.rn == 1)
+            .subquery()
+        )
+
+        stmt = (
+            select(
+                Conversation,
+                func.coalesce(count_sq.c.message_count, 0).label("message_count"),
+                first_user.c.first_message_preview,
+            )
+            .outerjoin(count_sq, Conversation.id == count_sq.c.conversation_id)
+            .outerjoin(first_user, Conversation.id == first_user.c.conversation_id)
+            .where(Conversation.context["deck_id"].astext == deck_id)
+            .order_by(desc(Conversation.updated_at))
+            .limit(limit)
+            .offset(offset)
+        )
+
+        result = await db.execute(stmt)
+        rows = result.all()
+
+        summaries = []
+        for conv, msg_count, preview in rows:
+            summaries.append({
+                "id": conv.id,
+                "title": conv.title,
+                "context": conv.context,
+                "provider": conv.provider,
+                "model": conv.model,
+                "is_active": conv.is_active,
+                "created_at": conv.created_at,
+                "updated_at": conv.updated_at,
+                "message_count": msg_count,
+                "first_message_preview": (preview[:120] + "…") if preview and len(preview) > 120 else preview,
+            })
+        return summaries
 
     async def delete_conversation(
         self, db: AsyncSession, conversation_id: UUID

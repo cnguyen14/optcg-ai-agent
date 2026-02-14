@@ -5,7 +5,7 @@ import { useChatStore } from "@/lib/stores/chatStore";
 import ChatMessage from "./ChatMessage";
 import MarkdownContent from "./MarkdownContent";
 import ThinkingIndicator from "./ThinkingIndicator";
-import ToolUseIndicator from "./ToolUseIndicator";
+import ActivityLog from "./ActivityLog";
 
 export default function ChatMessages() {
   const {
@@ -14,13 +14,16 @@ export default function ChatMessages() {
     currentThinking,
     currentToolUse,
     streamingText,
+    activityLog,
   } = useChatStore();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new content arrives
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingText, currentThinking, currentToolUse]);
+  }, [messages, streamingText, currentThinking, currentToolUse, activityLog]);
+
+  const hasActivity = activityLog.length > 0;
 
   return (
     <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
@@ -43,12 +46,6 @@ export default function ChatMessages() {
           {currentThinking.length > 0 && (
             <ThinkingIndicator thoughts={currentThinking} />
           )}
-          {currentToolUse && (
-            <ToolUseIndicator
-              tool={currentToolUse.tool}
-              args={currentToolUse.args}
-            />
-          )}
           {streamingText && (
             <div className="flex justify-start mb-3">
               <div className="max-w-[85%] rounded-2xl rounded-bl-md px-4 py-2.5 bg-white/5 text-white/90 text-sm leading-relaxed">
@@ -57,7 +54,12 @@ export default function ChatMessages() {
               </div>
             </div>
           )}
-          {!streamingText && !currentToolUse && currentThinking.length === 0 && (
+          {/* Activity indicator — compact pill under message area */}
+          {hasActivity && (
+            <ActivityLog entries={activityLog} />
+          )}
+          {/* Initial loading dots — only before any tools start */}
+          {!streamingText && !hasActivity && currentThinking.length === 0 && (
             <div className="flex justify-start mb-3">
               <div className="rounded-2xl rounded-bl-md px-4 py-3 bg-white/5">
                 <div className="flex gap-1">

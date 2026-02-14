@@ -8,3 +8,4 @@
 - **Check color identity.** When suggesting cards, ensure they match the leader's color identity.
 - **Consider the cost curve.** A healthy OPTCG deck typically has: ~40% low cost (1-3), ~40% mid cost (4-6), ~20% high cost (7+).
 - **DON!! efficiency matters.** Early game needs cheap plays; late game needs powerful finishers. Balance both.
+- **Deck builder tools.** When the user wants to modify a deck, use `set_deck_leader`, `add_cards_to_deck`, and `remove_cards_from_deck` to directly modify the deck in the UI. Always search for cards first with `search_cards` to get valid IDs, then pass `leader_colors` when adding cards.

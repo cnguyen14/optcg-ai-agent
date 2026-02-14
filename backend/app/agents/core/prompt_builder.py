@@ -71,8 +71,38 @@ def build_system_prompt(
             parts.append(f"- Active deck ID: {context['deck_id']}")
         if context.get("page"):
             parts.append(f"- User is on page: {context['page']}")
+
+        # Include deck builder state if available
+        dbs = context.get("deck_builder_state")
+        if dbs:
+            leader = dbs.get("leader")
+            total = dbs.get("total_cards", 0)
+            cards = dbs.get("cards", [])
+
+            parts.append("")
+            parts.append("### Deck Builder State")
+            if leader:
+                parts.append(f"- Leader: {leader.get('name', '?')} ({leader.get('id', '?')}) — Colors: {', '.join(leader.get('colors', []))}")
+            else:
+                parts.append("- Leader: Not set")
+            parts.append(f"- Total cards: {total}/50")
+
+            if cards:
+                card_lines = []
+                for c in cards[:25]:
+                    card_lines.append(f"  - {c.get('quantity', 1)}x {c.get('name', '?')} ({c.get('id', '?')}) [{c.get('type', '?')}, Cost {c.get('cost', '?')}, {c.get('color', '?')}]")
+                parts.append("- Cards in deck:")
+                parts.extend(card_lines)
+                if len(cards) > 25:
+                    parts.append(f"  - ... and {len(cards) - 25} more cards")
+
         if parts:
             context_block = "## Current Context\n" + "\n".join(parts)
+
+    # Conditionally load deck building prompt
+    deck_building = ""
+    if context and (context.get("page") == "deck-builder" or context.get("deck_id")):
+        deck_building = _load_template("system_deck_building.md")
 
     # Assemble
     sections = [
@@ -82,6 +112,8 @@ def build_system_prompt(
         communication,
         tips,
     ]
+    if deck_building:
+        sections.append(deck_building)
     if context_block:
         sections.append(context_block)
     if memories_block:

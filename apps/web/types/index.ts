@@ -13,8 +13,8 @@ export interface Card {
   category?: string;
   set_code?: string;
   image_url?: string;
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Leader {
@@ -29,8 +29,8 @@ export interface Leader {
   category?: string;
   set_code?: string;
   image_url?: string;
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface DeckCard {
@@ -100,6 +100,19 @@ export interface Conversation {
   messages?: ChatMessage[];
 }
 
+export interface ConversationSummary {
+  id: string;
+  title: string | null;
+  context: Record<string, unknown> | null;
+  provider: string | null;
+  model: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+  first_message_preview: string | null;
+}
+
 export interface ConversationCreate {
   title?: string;
   context?: Record<string, unknown>;
@@ -110,4 +123,12 @@ export interface ConversationCreate {
 export interface SSEEvent {
   type: "thinking" | "tool_use" | "tool_result" | "token" | "done" | "error";
   data: Record<string, unknown>;
+}
+
+export interface ActivityEntry {
+  id: string;
+  type: "tool" | "thinking";
+  label: string;
+  detail?: string;
+  status: "active" | "done";
 }

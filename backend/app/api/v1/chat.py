@@ -15,6 +15,7 @@ from app.database import get_db
 from app.schemas.chat import (
     ConversationCreate,
     ConversationResponse,
+    ConversationSummary,
     ConversationWithMessages,
     MessageCreate,
     MessageResponse,
@@ -64,6 +65,28 @@ async def list_conversations(
 ):
     """List all conversations."""
     return await _conversation_service.list_conversations(db, limit, offset)
+
+
+@router.get("/conversations/by-deck/{deck_id}", response_model=ConversationWithMessages | None)
+async def get_conversation_by_deck(
+    deck_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the most recent conversation for a deck."""
+    return await _conversation_service.get_conversation_by_deck(db, deck_id)
+
+
+@router.get("/conversations/by-deck/{deck_id}/all", response_model=list[ConversationSummary])
+async def list_conversations_by_deck(
+    deck_id: str,
+    limit: int = Query(default=20, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all conversations for a deck with message counts and previews."""
+    return await _conversation_service.list_conversations_by_deck(
+        db, deck_id, limit, offset
+    )
 
 
 @router.get("/conversations/{conversation_id}", response_model=ConversationWithMessages)
@@ -232,6 +255,7 @@ async def ag_ui_endpoint(
     api_keys = state.get("api_keys") or None
     local_url = state.get("local_url") or None
     deck_id = state.get("deck_id") or None
+    deck_builder_state = state.get("deck_builder_state") or None
 
     # Extract page from context
     page = None
@@ -259,6 +283,8 @@ async def ag_ui_endpoint(
             context["deck_id"] = deck_id
         if page:
             context["page"] = page
+        if deck_builder_state:
+            context["deck_builder_state"] = deck_builder_state
 
         conv = await _conversation_service.create_conversation(
             db,
@@ -289,6 +315,15 @@ async def ag_ui_endpoint(
                 local_url=local_url,
             )
 
+            # Merge latest request state into conversation context
+            agent_context = dict(conv.context or {})
+            if deck_id:
+                agent_context["deck_id"] = deck_id
+            if page:
+                agent_context["page"] = page
+            if deck_builder_state:
+                agent_context["deck_builder_state"] = deck_builder_state
+
             agent = OPTCGAgent(
                 llm=llm,
                 conversation_id=conversation_id,
@@ -296,7 +331,7 @@ async def ag_ui_endpoint(
                 memory_service=_memory_service,
                 knowledge_service=_knowledge_service,
                 conversation_service=_conversation_service,
-                context=conv.context or {},
+                context=agent_context,
             )
 
             adapter = AGUIAdapter(agent, encoder)

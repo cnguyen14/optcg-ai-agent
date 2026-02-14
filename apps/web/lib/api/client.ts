@@ -1,4 +1,4 @@
-import { Card, Leader, Deck, DeckCreateRequest, DeckUpdateRequest, Conversation, ConversationCreate, ChatMessage } from "@/types";
+import { Card, Leader, Deck, DeckCreateRequest, DeckUpdateRequest, Conversation, ConversationCreate, ConversationSummary, ChatMessage } from "@/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
@@ -210,6 +210,20 @@ class APIClient {
 
   async getConversation(id: string): Promise<Conversation> {
     return this.request<Conversation>(`/chat/conversations/${id}`);
+  }
+
+  async getConversationsByDeck(deckId: string): Promise<ConversationSummary[]> {
+    return this.request<ConversationSummary[]>(
+      `/chat/conversations/by-deck/${deckId}/all`
+    );
+  }
+
+  async getConversationByDeck(deckId: string): Promise<Conversation | null> {
+    try {
+      return await this.request<Conversation>(`/chat/conversations/by-deck/${deckId}`);
+    } catch {
+      return null;
+    }
   }
 
   async deleteConversation(id: string): Promise<void> {

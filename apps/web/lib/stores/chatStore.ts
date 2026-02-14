@@ -1,7 +1,8 @@
 import { create } from "zustand";
-import { ChatMessage } from "@/types";
+import { ChatMessage, ActivityEntry } from "@/types";
 import { api } from "@/lib/api/client";
 import { useSettingsStore } from "@/lib/stores/settingsStore";
+import { useDeckBuilder } from "@/lib/stores/deckBuilderStore";
 
 interface ChatState {
   // UI state
@@ -17,6 +18,7 @@ interface ChatState {
   currentThinking: string[];
   currentToolUse: { tool: string; args?: Record<string, unknown> } | null;
   streamingText: string;
+  activityLog: ActivityEntry[];
 
   // Context
   currentDeckId: string | null;
@@ -25,10 +27,44 @@ interface ChatState {
   // Actions
   toggleOpen: () => void;
   toggleExpanded: () => void;
-  setContext: (deckId: string | null, page: string | null) => void;
+  setContext: (deckId: string | null, page: string | null, skipAutoLoad?: boolean) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   clearChat: () => void;
   loadConversation: (conversationId: string) => Promise<void>;
+}
+
+async function handleDeckAction(
+  action: {
+    action: string;
+    leader?: Record<string, unknown>;
+    cards?: Array<{ card: Record<string, unknown>; quantity: number }>;
+    card_ids?: string[];
+  },
+  deckId: string | null
+) {
+  const db = useDeckBuilder.getState();
+
+  // If the store doesn't have a deck loaded, load it from API first
+  if (!db.deckId && deckId) {
+    try {
+      const deck = await api.getDeck(deckId);
+      db.loadDeck(deck);
+    } catch (e) {
+      console.error("Failed to load deck for action:", e);
+    }
+  }
+
+  switch (action.action) {
+    case "set_leader":
+      if (action.leader) db.setLeader(action.leader as any);
+      break;
+    case "add_cards":
+      action.cards?.forEach((c) => db.addCard(c.card as any, c.quantity));
+      break;
+    case "remove_cards":
+      action.card_ids?.forEach((id) => db.removeCard(id));
+      break;
+  }
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -40,27 +76,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
   currentThinking: [],
   currentToolUse: null,
   streamingText: "",
+  activityLog: [],
   currentDeckId: null,
   currentPage: null,
 
   toggleOpen: () => set((s) => ({ isOpen: !s.isOpen })),
   toggleExpanded: () => set((s) => ({ isExpanded: !s.isExpanded })),
 
-  setContext: (deckId, page) => {
+  setContext: async (deckId, page, skipAutoLoad) => {
     const state = get();
-    if (state.conversationId && state.currentDeckId !== deckId) {
-      // Deck changed — reset conversation so the new one picks up fresh context
-      set({
-        currentDeckId: deckId,
-        currentPage: page,
-        conversationId: null,
-        messages: [],
-        streamingText: "",
-        currentThinking: [],
-        currentToolUse: null,
-      });
-    } else {
-      set({ currentDeckId: deckId, currentPage: page });
+    if (state.currentDeckId === deckId) {
+      set({ currentPage: page });
+      return;
+    }
+    // Deck changed — clear immediately
+    set({
+      currentDeckId: deckId,
+      currentPage: page,
+      conversationId: null,
+      messages: [],
+      streamingText: "",
+      currentThinking: [],
+      currentToolUse: null,
+      activityLog: [],
+    });
+    // Restore previous conversation for this deck (unless caller will load one explicitly)
+    if (deckId && !skipAutoLoad) {
+      try {
+        const conv = await api.getConversationByDeck(deckId);
+        if (conv?.messages?.length) {
+          set({ conversationId: conv.id, messages: conv.messages });
+        }
+      } catch {
+        /* no previous conversation */
+      }
     }
   },
 
@@ -71,6 +120,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       currentThinking: [],
       currentToolUse: null,
       streamingText: "",
+      activityLog: [],
     }),
 
   loadConversation: async (conversationId: string) => {
@@ -89,7 +139,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const state = get();
     if (state.isStreaming) return;
 
-    set({ isStreaming: true, currentThinking: [], currentToolUse: null, streamingText: "" });
+    set({ isStreaming: true, currentThinking: [], currentToolUse: null, streamingText: "", activityLog: [] });
 
     try {
       // Read settings — mode determines provider/model/keys
@@ -126,6 +176,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
       set((s) => ({ messages: [...s.messages, userMsg] }));
 
+      // Build deck builder state snapshot if on deck-builder page
+      let deckBuilderState: Record<string, unknown> | undefined;
+      if (state.currentPage === "deck-builder") {
+        const db = useDeckBuilder.getState();
+        deckBuilderState = {
+          leader: db.leader
+            ? { id: db.leader.id, name: db.leader.name, colors: db.leader.colors, life: db.leader.life }
+            : null,
+          total_cards: db.getTotalCards(),
+          cards: db.cards.map((dc) => ({
+            id: dc.card.id,
+            name: dc.card.name,
+            quantity: dc.quantity,
+            cost: dc.card.cost,
+            color: dc.card.color,
+            type: dc.card.type,
+          })),
+        };
+      }
+
       // Build AG-UI request
       const agUIBody = {
         thread_id: convId || undefined,
@@ -140,6 +210,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           api_keys: apiKeys,
           local_url: isLocal && localUrl ? localUrl : undefined,
           deck_id: state.currentDeckId || undefined,
+          deck_builder_state: deckBuilderState,
         },
         context: state.currentPage
           ? [{ type: "page", value: state.currentPage }]
@@ -197,12 +268,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
               case "TOOL_CALL_START":
                 toolArgs = "";
-                set({
+                set((s) => ({
                   currentToolUse: {
                     tool: evt.toolCallName,
                     args: {},
                   },
-                });
+                  activityLog: [
+                    ...s.activityLog.map((e) =>
+                      e.status === "active" ? { ...e, status: "done" as const } : e
+                    ),
+                    {
+                      id: `tool-${Date.now()}`,
+                      type: "tool" as const,
+                      label: evt.toolCallName,
+                      status: "active" as const,
+                    },
+                  ],
+                }));
                 break;
 
               case "TOOL_CALL_ARGS":
@@ -223,12 +305,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 break;
 
               case "TOOL_CALL_RESULT":
-                set({ currentToolUse: null });
+                set((s) => ({
+                  currentToolUse: null,
+                  activityLog: s.activityLog.map((e) =>
+                    e.status === "active" ? { ...e, status: "done" as const } : e
+                  ),
+                }));
                 break;
 
               case "CUSTOM":
                 if (evt.name === "thinking" && evt.value?.thoughts) {
                   set({ currentThinking: evt.value.thoughts });
+                }
+                if (evt.name === "deck_action" && evt.value) {
+                  await handleDeckAction(evt.value, get().currentDeckId);
                 }
                 break;
 

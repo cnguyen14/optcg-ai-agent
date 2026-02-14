@@ -5,13 +5,16 @@ interface ToolUseIndicatorProps {
   args?: Record<string, unknown>;
 }
 
-const TOOL_LABELS: Record<string, string> = {
+export const TOOL_LABELS: Record<string, string> = {
   search_cards: "Searching cards",
   get_deck_info: "Loading deck",
   validate_deck: "Validating deck",
   search_knowledge: "Searching rules",
   calculate_stats: "Calculating stats",
   response: "Composing response",
+  set_deck_leader: "Setting leader",
+  add_cards_to_deck: "Adding cards to deck",
+  remove_cards_from_deck: "Removing cards from deck",
 };
 
 export default function ToolUseIndicator({ tool, args }: ToolUseIndicatorProps) {
